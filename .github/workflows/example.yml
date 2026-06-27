@@ -1,0 +1,77 @@
+name: Kiro Action Examples
+
+on:
+  workflow_dispatch:
+
+jobs:
+  simple-repository-review:
+    name: Simple repository review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Review repository
+        uses: giusedroid/kiro-action@v1
+        with:
+          kiro-api-key: ${{ secrets.KIRO_API_KEY }}
+          trust-tools: read,grep
+          prompt: |
+            Review this repository for clarity, correctness, and missing documentation.
+            Suggest improvements without modifying files.
+
+  content-generation:
+    name: Content generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: kiro
+        name: Generate release notes draft
+        uses: giusedroid/kiro-action@v1
+        with:
+          kiro-api-key: ${{ secrets.KIRO_API_KEY }}
+          trust-tools: read,grep
+          prompt: |
+            Draft release notes from the repository history and current README.
+            Return Markdown only.
+
+      - name: Save generated content
+        run: |
+          printf '%s\n' "${KIRO_RESPONSE}" > release-notes-draft.md
+        env:
+          KIRO_RESPONSE: ${{ steps.kiro.outputs.response }}
+
+  write-permissions:
+    name: Using write permissions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update README
+        uses: giusedroid/kiro-action@v1
+        with:
+          kiro-api-key: ${{ secrets.KIRO_API_KEY }}
+          trust-tools: read,grep,write
+          prompt: |
+            Update README.md to include a concise setup section.
+            Do not commit the change.
+
+      - name: Show generated diff
+        run: git diff -- README.md
+
+  mcp-startup-validation:
+    name: MCP startup validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run with MCP startup validation
+        uses: giusedroid/kiro-action@v1
+        with:
+          kiro-api-key: ${{ secrets.KIRO_API_KEY }}
+          require-mcp-startup: "true"
+          trust-tools: read,grep
+          prompt: |
+            Use the configured MCP context to summarize the repository structure.

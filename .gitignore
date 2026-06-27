@@ -1,0 +1,17 @@
+.DS_Store
+Thumbs.db
+
+*.log
+*.tmp
+*.swp
+
+.env
+.env.*
+!.env.example
+
+.kiro/
+kiro-output.txt
+
+node_modules/
+dist/
+coverage/

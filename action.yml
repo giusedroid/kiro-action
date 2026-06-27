@@ -1,0 +1,128 @@
+name: Kiro Action
+description: Run Kiro CLI headlessly in GitHub Actions.
+author: giusedroid
+
+branding:
+  icon: terminal
+  color: blue
+
+inputs:
+  prompt:
+    description: Prompt to send to Kiro. Multiline prompts are supported.
+    required: true
+  kiro-api-key:
+    description: Kiro API key. Pass this from GitHub Secrets.
+    required: true
+  working-directory:
+    description: Directory where Kiro should run.
+    required: false
+    default: "."
+  trust-tools:
+    description: Comma-separated list of tools Kiro is allowed to use.
+    required: false
+    default: "read,grep"
+  trust-all-tools:
+    description: Allow Kiro to use all available tools. Prefer trust-tools when possible.
+    required: false
+    default: "false"
+  require-mcp-startup:
+    description: Fail if configured MCP servers do not start successfully.
+    required: false
+    default: "false"
+
+outputs:
+  response:
+    description: Full stdout emitted by Kiro.
+    value: ${{ steps.run-kiro.outputs.response }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Kiro CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        curl -fsSL https://cli.kiro.dev/install | bash
+
+        echo "$HOME/.kiro/bin" >> "$GITHUB_PATH"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+        export PATH="$HOME/.kiro/bin:$HOME/.local/bin:$PATH"
+        if ! command -v kiro-cli >/dev/null; then
+          echo "::error::Kiro CLI installation completed, but kiro-cli was not found on PATH."
+          exit 1
+        fi
+
+    - name: Run Kiro headless
+      id: run-kiro
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        KIRO_API_KEY: ${{ inputs.kiro-api-key }}
+        INPUT_PROMPT: ${{ inputs.prompt }}
+        INPUT_TRUST_TOOLS: ${{ inputs.trust-tools }}
+        INPUT_TRUST_ALL_TOOLS: ${{ inputs.trust-all-tools }}
+        INPUT_REQUIRE_MCP_STARTUP: ${{ inputs.require-mcp-startup }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${KIRO_API_KEY}" ]; then
+          echo "::error::kiro-api-key is required and must not be empty."
+          exit 1
+        fi
+
+        if [ -z "${INPUT_PROMPT}" ]; then
+          echo "::error::prompt is required and must not be empty."
+          exit 1
+        fi
+
+        if ! command -v kiro-cli >/dev/null; then
+          echo "::error::kiro-cli was not found on PATH."
+          exit 1
+        fi
+
+        flags=(--no-interactive)
+
+        case "${INPUT_TRUST_ALL_TOOLS}" in
+          true)
+            flags+=(--trust-all-tools)
+            ;;
+          false)
+            if [ -n "${INPUT_TRUST_TOOLS}" ]; then
+              flags+=("--trust-tools=${INPUT_TRUST_TOOLS}")
+            fi
+            ;;
+          *)
+            echo "::error::trust-all-tools must be either 'true' or 'false'."
+            exit 1
+            ;;
+        esac
+
+        case "${INPUT_REQUIRE_MCP_STARTUP}" in
+          true)
+            flags+=(--require-mcp-startup)
+            ;;
+          false)
+            ;;
+          *)
+            echo "::error::require-mcp-startup must be either 'true' or 'false'."
+            exit 1
+            ;;
+        esac
+
+        output_dir="${RUNNER_TEMP:-$PWD}"
+        output_file="${output_dir}/kiro-action-output-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$.txt"
+
+        kiro-cli chat "${flags[@]}" -- "${INPUT_PROMPT}" | tee "${output_file}"
+
+        delimiter="KIRO_ACTION_RESPONSE_$(date +%s%N)_${RANDOM}"
+        while grep -qx "${delimiter}" "${output_file}"; do
+          delimiter="KIRO_ACTION_RESPONSE_$(date +%s%N)_${RANDOM}"
+        done
+
+        {
+          printf 'response<<%s\n' "${delimiter}"
+          cat "${output_file}"
+          printf '\n%s\n' "${delimiter}"
+        } >> "${GITHUB_OUTPUT}"
