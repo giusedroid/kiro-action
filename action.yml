@@ -1,4 +1,4 @@
-name: Kiro Action
+name: Headless Kiro CLI
 description: Run Kiro CLI headlessly in GitHub Actions.
 author: giusedroid
 
