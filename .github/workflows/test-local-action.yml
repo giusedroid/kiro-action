@@ -1,0 +1,35 @@
+name: Test Local Kiro Action
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Summarize README and license
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: kiro
+        name: Run local action
+        uses: ./
+        with:
+          kiro-api-key: ${{ secrets.KIRO_API_KEY }}
+          trust-tools: read,grep
+          prompt: |
+            Read README.md and LICENSE.
+
+            Return a concise response with:
+            1. A summary of what this repository provides.
+            2. The license this repository is released under.
+
+            Do not modify files.
+
+      - name: Print Kiro response
+        run: |
+          printf '%s\n' "${KIRO_RESPONSE}"
+        env:
+          KIRO_RESPONSE: ${{ steps.kiro.outputs.response }}
